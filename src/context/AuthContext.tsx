@@ -17,50 +17,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        // Check active sessions and sets the user
-        const checkSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            setUser(session?.user ?? null);
-            setLoading(false);
-        };
+useEffect(() => {
+  // ⛔ During build / env missing → disable auth safely
+  if (!supabase) {
+    setUser(null);
+    setLoading(false);
+    return;
+  }
 
-        checkSession();
+  const checkSession = async () => {
+    const { data } = await supabase!.auth.getSession();
+    setUser(data.session?.user ?? null);
+    setLoading(false);
+  };
 
-        // Listen for changes on auth state (logged in, signed out, etc.)
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            (_event, session) => {
-                setUser(session?.user ?? null);
-                setLoading(false);
-            }
-        );
+  checkSession();
 
-        return () => subscription.unsubscribe();
-    }, []);
+  const { data: listener } = supabase!.auth.onAuthStateChange(
+    (_event, session) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    }
+  );
+
+  return () => {
+    listener?.subscription.unsubscribe();
+  };
+}, []);
 
     const signInWithGoogle = async () => {
-        try {
-            const { error } = await supabase.auth.signInWithOAuth({
-                provider: "google",
-                options: {
-                    redirectTo: `${window.location.origin}/auth/callback`,
-                }
-            });
-            if (error) throw error;
-        } catch (error) {
-            console.error("Error signing in with Google:", error);
-            alert("Error logging in with Google. Please check console.");
-        }
-    };
+    if (!supabase) {
+        alert("Authentication is not configured.");
+        return;
+    }
 
-    const signOut = async () => {
-        try {
-            const { error } = await supabase.auth.signOut();
-            if (error) throw error;
-        } catch (error) {
-            console.error("Error signing out:", error);
-        }
-    };
+    try {
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: "google",
+            options: {
+                redirectTo: `${window.location.origin}/auth/callback`,
+            },
+        });
+        if (error) throw error;
+    } catch (error) {
+        console.error("Error signing in with Google:", error);
+        alert("Error logging in with Google.");
+    }
+};
+
+const signOut = async () => {
+    if (!supabase) return;
+
+    try {
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+    } catch (error) {
+        console.error("Error signing out:", error);
+    }
+};
 
     return (
         <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOut }}>
